@@ -1,10 +1,9 @@
 import sys
 import time
-from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QProgressBar, QLabel, QFrame, QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QProgressBar, QLabel, QFrame, QHBoxLayout, QVBoxLayout, QMainWindow, QGraphicsDropShadowEffect
 from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QGraphicsDropShadowEffect
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QPixmap, QColor
+from register_window import Ui_MainWindow as RegisterWindow
 
 class SplashScreen(QWidget):
     def __init__(self):
@@ -91,19 +90,16 @@ class SplashScreen(QWidget):
 
             time.sleep(1)
 
-            self.myApp = MyApp()
+            self.myApp = open_reg_window()
             self.myApp.show()
 
         self.counter += 1
 
-class MyApp(QWidget):
+class open_reg_window(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.window_width, self.window_height = 1200, 800
-        self.setMinimumSize(self.window_width, self.window_height)
-
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        self.ui = RegisterWindow()
+        self.ui.setupUi(self)
 
 
 if __name__ == '__main__':

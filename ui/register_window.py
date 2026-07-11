@@ -1,10 +1,11 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
+from login_window import Ui_MainWindow as LoginWindow
 
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
         MainWindow.setObjectName("MainWindow")
-        MainWindow.resize(442, 663)
+        MainWindow.setFixedSize(442, 663)
         MainWindow.setStyleSheet("background-color: rgb(10, 15, 28);")
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
@@ -112,10 +113,20 @@ class Ui_MainWindow(object):
 "background-color: rgb(10, 15, 28);\n"
 "border: 1px solid  rgb(10, 15, 28);")
         self.login_page_btn.setObjectName("login_page_btn")
+        self.login_page_btn.clicked.connect(self.open_login_window)
         MainWindow.setCentralWidget(self.centralwidget)
 
         self.retranslateUi(MainWindow)
         QtCore.QMetaObject.connectSlotsByName(MainWindow)
+
+    def open_login_window(self):
+        #open the login window and close the register window
+        self.login_window = QtWidgets.QMainWindow()
+        self.ui = LoginWindow()
+        self.ui.setupUi(self.login_window)
+        self.login_window.show()
+        self.centralwidget.close()
+
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
