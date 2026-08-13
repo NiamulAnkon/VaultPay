@@ -1,6 +1,6 @@
 from __future__ import annotations
-
 from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, Qt
+from PyQt5.QtGui import QPixmap, QIcon
 from PyQt5.QtWidgets import (
     QApplication,
     QComboBox,
@@ -23,6 +23,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from pathlib import Path
 
 from services.account_service import AccountService
 from services.finance_service import FinanceService
@@ -57,21 +58,20 @@ class TitleBar(QFrame):
         layout.setContentsMargins(18, 10, 18, 10)
         layout.setSpacing(12)
 
+        # Add logo image
+        logo_path = Path(__file__).parent.parent / "assets" / "logo.png"
+        if logo_path.exists():
+            logo_label = QLabel()
+            logo_pixmap = QPixmap(str(logo_path))
+            logo_pixmap = logo_pixmap.scaledToHeight(40, Qt.SmoothTransformation)
+            logo_label.setPixmap(logo_pixmap)
+            layout.addWidget(logo_label)
+
         self.title_label = QLabel("VaultPay")
         self.title_label.setStyleSheet("color: #7DD3FC; font-size: 24px; font-weight: bold;")
         layout.addWidget(self.title_label)
 
         layout.addStretch(1)
-
-        self.min_button = QPushButton("—")
-        self.min_button.setStyleSheet("QPushButton { background: transparent; color: white; border: none; font-size: 18px; }")
-        self.min_button.clicked.connect(self.parent_window.showMinimized)
-        layout.addWidget(self.min_button)
-
-        self.close_button = QPushButton("✕")
-        self.close_button.setStyleSheet("QPushButton { background: transparent; color: white; border: none; font-size: 18px; }")
-        self.close_button.clicked.connect(self.parent_window.close)
-        layout.addWidget(self.close_button)
 
 
 class DashboardPage(QWidget):
@@ -640,6 +640,11 @@ class VaultPayMainWindow(QMainWindow):
         self.setWindowTitle("VaultPay")
         self.resize(1280, 780)
         self.setStyleSheet("QMainWindow { background: #0A0F1C; } QWidget { background: #0A0F1C; color: white; }")
+
+        # Set window icon
+        icon_path = Path(__file__).parent.parent / "assets" / "logo.png"
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
