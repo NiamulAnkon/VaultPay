@@ -6,6 +6,7 @@ class Ui_MainWindow(object):
         MainWindow.setObjectName("MainWindow")
         MainWindow.setFixedSize(442, 663)
         MainWindow.setStyleSheet("background-color: rgb(10, 15, 28);")
+        MainWindow.setWindowIcon(QtGui.QIcon("./assets/logo.png"))
         self.centralwidget = QtWidgets.QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.logo = QtWidgets.QLabel(self.centralwidget)

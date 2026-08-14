@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
     QWidget,
     QInputDialog,
 )
-
+from PyQt5 import QtGui
 from services.account_service import AccountService
 from services.finance_service import FinanceService
 from ui.main_window import VaultPayMainWindow
@@ -46,6 +46,7 @@ class AuthWindow(QMainWindow):
             }
             """
         )
+        self.setWindowIcon(QtGui.QIcon("./assets/logo.png"))
 
         self.stack = QStackedWidget(self)
         self.setCentralWidget(self.stack)

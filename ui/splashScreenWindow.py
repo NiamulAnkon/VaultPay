@@ -1,7 +1,8 @@
 import sys
 import time
 from PyQt5.QtWidgets import QApplication, QWidget, QPushButton, QProgressBar, QLabel, QFrame, QHBoxLayout, QVBoxLayout, QMainWindow, QGraphicsDropShadowEffect
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5 import QtGui
 from PyQt5.QtGui import QPixmap, QColor
 from register_window import Ui_MainWindow as RegisterWindow
 
@@ -12,6 +13,7 @@ class SplashScreen(QWidget):
         self.setFixedSize(1100, 500)
         self.setWindowFlag(Qt.FramelessWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setWindowIcon(QtGui.QIcon("./assets/logo.png"))
 
         self.counter = 0
         self.n = 100 # total instance
