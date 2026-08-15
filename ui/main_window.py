@@ -821,12 +821,12 @@ class GoalsPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_window = parent
+        self.finance_service = parent.finance_service if parent is not None else None
         self.setStyleSheet("QWidget { background: #0A0F1C; } QLabel { color: #F8FAFC; }")
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(12)
 
-        # Header
         header_row = QHBoxLayout()
         title = QLabel("Goals")
         title.setStyleSheet("font-size: 28px; font-weight: bold;")
@@ -842,40 +842,32 @@ class GoalsPage(QWidget):
         header_row.addWidget(self.createGoalButton)
         root.addLayout(header_row)
 
-        # Summary cards
         cards_row = QHBoxLayout()
         cards_row.setSpacing(12)
         self.activeGoalsCard = self._summary_card("Active Goals", "0", "activeGoalsCard", "activeGoalsValueLabel")
         self.totalTargetCard = self._summary_card("Total Target", "৳0", "totalTargetCard", "totalTargetValueLabel")
         self.totalSavedCard = self._summary_card("Total Saved", "৳0", "totalSavedCard", "totalSavedValueLabel")
-        for c in [self.activeGoalsCard, self.totalTargetCard, self.totalSavedCard]:
-            cards_row.addWidget(c)
+        for card in [self.activeGoalsCard, self.totalTargetCard, self.totalSavedCard]:
+            cards_row.addWidget(card)
         root.addLayout(cards_row)
 
-        # Goals area
         self.goalsScrollArea = QScrollArea()
         self.goalsScrollArea.setObjectName("goalsScrollArea")
         self.goalsScrollArea.setWidgetResizable(True)
-        container = QWidget()
-        container.setStyleSheet("background: transparent;")
-        container_layout = QVBoxLayout(container)
-        container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(12)
-        container.setLayout(container_layout)
-        container.setObjectName("goalsContainer")
-        self.goalsLayout = container_layout
+        self.goalsContainer = QWidget()
+        self.goalsContainer.setStyleSheet("background: transparent;")
+        self.goalsLayout = QVBoxLayout(self.goalsContainer)
+        self.goalsLayout.setContentsMargins(0, 0, 0, 0)
+        self.goalsLayout.setSpacing(12)
+        self.goalsContainer.setObjectName("goalsContainer")
         self.goalsLayout.setObjectName("goalsLayout")
-
-        # Add a couple of example cards
-        self._add_sample_goals()
-
-        self.goalsScrollArea.setWidget(container)
+        self.goalsScrollArea.setWidget(self.goalsContainer)
         root.addWidget(self.goalsScrollArea)
 
-        # Empty state (hidden by default)
         self.empty_state = QFrame()
         self.empty_state.setVisible(False)
         empty_layout = QVBoxLayout(self.empty_state)
+        empty_layout.setAlignment(Qt.AlignCenter)
         empty_label = QLabel("No goals yet")
         empty_label.setStyleSheet("font-size: 18px; font-weight: bold;")
         empty_sub = QLabel("Create your first goal and start tracking your progress.")
@@ -900,42 +892,41 @@ class GoalsPage(QWidget):
         val = QLabel(value)
         val.setObjectName(value_object_name)
         val.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
+        if value_object_name == "activeGoalsValueLabel":
+            self.activeGoalsValueLabel = val
+        elif value_object_name == "totalTargetValueLabel":
+            self.totalTargetValueLabel = val
+        elif value_object_name == "totalSavedValueLabel":
+            self.totalSavedValueLabel = val
         layout.addWidget(title_label)
         layout.addWidget(val)
         return frame
 
-    def _add_sample_goals(self):
-        # Sample 1: Save Separately
-        card1 = self._goal_card(
-            name="New Gaming Mouse",
-            goal_type="separate",
-            saved=2000,
-            target=5000,
-        )
-        # Sample 2: Direct Balance
-        card2 = self._goal_card(
-            name="Trip to Cox's Bazar",
-            goal_type="direct",
-            saved=5000,
-            target=15000,
-        )
-        self.goalsLayout.addWidget(card1)
-        self.goalsLayout.addWidget(card2)
-        self.goalsLayout.addStretch(1)
+    def _clear_goals_layout(self):
+        while self.goalsLayout.count():
+            item = self.goalsLayout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
 
-    def _goal_card(self, name, goal_type, saved, target):
+    def _goal_card(self, goal):
+        goal_type = goal["goal_type"]
+        saved_amount = float(goal.get("saved_amount", 0.0))
+        target_amount = float(goal["target_amount"])
+        percent = min(100, int((saved_amount / target_amount) * 100)) if target_amount > 0 else 0
+        remaining = max(target_amount - saved_amount, 0.0)
+
         frame = QFrame()
         frame.setStyleSheet("QFrame { background: #1A2332; border: 1px solid #334155; border-radius: 12px; }")
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(12, 12, 12, 12)
+
         top_row = QHBoxLayout()
-        name_label = QLabel(name)
+        name_label = QLabel(goal["name"])
         name_label.setStyleSheet("font-weight: bold; font-size: 16px;")
         top_row.addWidget(name_label)
         badge = QLabel("Save Separately" if goal_type == "separate" else "Direct Balance")
-        badge.setStyleSheet(
-            "QLabel { padding: 6px 8px; border-radius: 8px; font-size: 12px; }"
-        )
+        badge.setStyleSheet("QLabel { padding: 6px 8px; border-radius: 8px; font-size: 12px; }")
         if goal_type == "separate":
             badge.setStyleSheet(badge.styleSheet() + "QLabel { background: #1E88E5; color: white; }")
         else:
@@ -944,84 +935,158 @@ class GoalsPage(QWidget):
         top_row.addWidget(badge)
         layout.addLayout(top_row)
 
-        # Progress section
         progress_row = QHBoxLayout()
         left = QVBoxLayout()
-        left.addWidget(QLabel(f"Saved\n৳{saved:,.2f}"))
-        left.addWidget(QLabel(f"Target\n৳{target:,.2f}"))
+        left.addWidget(QLabel(f"Saved\n৳{saved_amount:,.2f}"))
+        left.addWidget(QLabel(f"Target\n৳{target_amount:,.2f}"))
         progress_row.addLayout(left)
-        percent = int((saved / target) * 100) if target > 0 else 0
-        prog = QProgressBar()
-        prog.setObjectName("goalProgressBar")
-        prog.setValue(percent)
-        prog.setStyleSheet("QProgressBar { background: #0F172A; border: 1px solid #334155; height: 12px; border-radius: 6px; } QProgressBar::chunk { background: #00C2FF; }")
-        progress_row.addWidget(prog, 1)
+        progress_bar = QProgressBar()
+        progress_bar.setObjectName("goalProgressBar")
+        progress_bar.setValue(percent)
+        progress_bar.setStyleSheet("QProgressBar { background: #0F172A; border: 1px solid #334155; height: 12px; border-radius: 6px; } QProgressBar::chunk { background: #00C2FF; }")
+        progress_row.addWidget(progress_bar, 1)
         right = QVBoxLayout()
         right.addWidget(QLabel(f"{percent}% Complete"))
-        remaining = target - saved
         right.addWidget(QLabel(f"৳{remaining:,.2f} remaining"))
         progress_row.addLayout(right)
         layout.addLayout(progress_row)
 
-        # Actions
         action_row = QHBoxLayout()
         if goal_type == "separate":
             add_btn = QPushButton("Add Savings")
             add_btn.setObjectName("addSavingsButton")
-            add_btn.clicked.connect(lambda _, n=name, s=saved, r=remaining: self._open_add_savings(n, s, r))
+            add_btn.clicked.connect(lambda _, g=goal: self._open_add_savings(g))
             withdraw_btn = QPushButton("Withdraw Savings")
             withdraw_btn.setObjectName("withdrawSavingsButton")
-            withdraw_btn.clicked.connect(lambda _, n=name, s=saved: self._open_withdraw_savings(n, s))
+            withdraw_btn.clicked.connect(lambda _, g=goal: self._open_withdraw_savings(g))
             action_row.addWidget(add_btn)
             action_row.addWidget(withdraw_btn)
-        # Common buttons
+
         complete_btn = QPushButton("Complete")
         complete_btn.setObjectName("completeGoalButton")
-        complete_btn.clicked.connect(lambda _, n=name: self._open_complete(n))
+        complete_btn.clicked.connect(lambda _, g=goal: self._complete_goal(g))
         remove_btn = QPushButton("Remove")
         remove_btn.setObjectName("removeGoalButton")
-        remove_btn.clicked.connect(lambda _, n=name, sep=(goal_type=="separate"): self._open_remove(n, sep))
+        remove_btn.clicked.connect(lambda _, g=goal: self._remove_goal(g))
         action_row.addStretch(1)
         action_row.addWidget(complete_btn)
         action_row.addWidget(remove_btn)
         layout.addLayout(action_row)
-
         return frame
 
-    def _open_add_savings(self, name, saved, remaining):
-        dlg = AddSavingsDialog(name, saved, remaining, self)
-        dlg.exec_()
+    def _completed_goal_card(self, goal):
+        frame = QFrame()
+        frame.setStyleSheet("QFrame { background: #1A2332; border: 1px solid #334155; border-radius: 12px; opacity: 0.9; }")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 12, 12, 12)
+        row = QHBoxLayout()
+        label = QLabel(f"{goal['name']}  Completed ✓")
+        label.setStyleSheet("font-weight: bold; font-size: 16px; color: #22C55E;")
+        row.addWidget(label)
+        row.addStretch(1)
+        remove_btn = QPushButton("Remove")
+        remove_btn.setObjectName("removeGoalButton")
+        remove_btn.setStyleSheet("QPushButton { background: #EF4444; color: white; }")
+        remove_btn.clicked.connect(lambda _, g=goal: self._remove_goal(g))
+        row.addWidget(remove_btn)
+        layout.addLayout(row)
+        return frame
 
-    def _open_withdraw_savings(self, name, saved):
-        dlg = WithdrawSavingsDialog(name, saved, self)
-        dlg.exec_()
+    def _open_add_savings(self, goal):
+        dlg = AddSavingsDialog(goal["name"], float(goal.get("saved_amount", 0.0)), max(float(goal["target_amount"]) - float(goal.get("saved_amount", 0.0)), 0.0), self)
+        if dlg.exec_() == QDialog.Accepted:
+            amount = float(dlg.addSavingsAmountInput.value())
+            if amount <= 0:
+                QMessageBox.warning(self, "Invalid Amount", "Please enter a valid amount.")
+                return
+            try:
+                self.finance_service.add_goal_savings(self.parent_window.user_id, goal["id"], amount)
+                self.refresh()
+                QMessageBox.information(self, "Saved", f"Added ৳{amount:,.2f} to '{goal['name']}'.")
+            except ValueError as exc:
+                QMessageBox.warning(self, "Add Savings Failed", str(exc))
 
-    def _open_complete(self, name):
+    def _open_withdraw_savings(self, goal):
+        dlg = WithdrawSavingsDialog(goal["name"], float(goal.get("saved_amount", 0.0)), self)
+        if dlg.exec_() == QDialog.Accepted:
+            amount = float(dlg.withdrawSavingsAmountInput.value())
+            if amount <= 0:
+                QMessageBox.warning(self, "Invalid Amount", "Please enter a valid amount.")
+                return
+            try:
+                self.finance_service.withdraw_goal_savings(self.parent_window.user_id, goal["id"], amount)
+                self.refresh()
+                QMessageBox.information(self, "Withdrawal Complete", f"Withdrew ৳{amount:,.2f} from '{goal['name']}'.")
+            except ValueError as exc:
+                QMessageBox.warning(self, "Withdrawal Failed", str(exc))
+
+    def _complete_goal(self, goal):
         dlg = CompleteGoalDialog(self)
         if dlg.exec_() == QDialog.Accepted:
-            QMessageBox.information(self, "Completed", f"Marked '{name}' as completed.")
+            try:
+                self.finance_service.complete_goal(self.parent_window.user_id, goal["id"])
+                self.refresh()
+                QMessageBox.information(self, "Goal Completed", f"'{goal['name']}' marked as completed.")
+            except ValueError as exc:
+                QMessageBox.warning(self, "Complete Goal Failed", str(exc))
 
-    def _open_remove(self, name, is_separate):
-        dlg = RemoveGoalDialog(is_separate, self)
+    def _remove_goal(self, goal):
+        dlg = RemoveGoalDialog(goal["goal_type"] == "separate", self)
         if dlg.exec_() == QDialog.Accepted:
-            QMessageBox.information(self, "Removed", f"Removed goal '{name}'.")
+            try:
+                self.finance_service.remove_goal(self.parent_window.user_id, goal["id"])
+                self.refresh()
+                QMessageBox.information(self, "Goal Removed", f"Removed goal '{goal['name']}'.")
+            except ValueError as exc:
+                QMessageBox.warning(self, "Remove Goal Failed", str(exc))
 
     def open_create_dialog(self):
         dlg = CreateGoalDialog(self)
         if dlg.exec_() == QDialog.Accepted:
-            QMessageBox.information(self, "Goal Created", "Goal created (placeholder).")
+            try:
+                goal_type = "separate" if dlg._selected_type == "separate" else "direct"
+                self.finance_service.create_goal(
+                    self.parent_window.user_id,
+                    dlg.goalNameInput.text().strip(),
+                    dlg.targetAmountInput.value(),
+                    goal_type,
+                )
+                self.refresh()
+                QMessageBox.information(self, "Goal Created", "Your new goal has been created.")
+            except ValueError as exc:
+                QMessageBox.warning(self, "Create Goal Failed", str(exc))
 
     def refresh(self):
-        # Placeholder values until real data is wired
-        self.activeGoalsValueLabel = self.findChild(QLabel, "activeGoalsValueLabel")
-        self.totalTargetValueLabel = self.findChild(QLabel, "totalTargetValueLabel")
-        self.totalSavedValueLabel = self.findChild(QLabel, "totalSavedValueLabel")
-        if self.activeGoalsValueLabel:
-            self.activeGoalsValueLabel.setText("3")
-        if self.totalTargetValueLabel:
-            self.totalTargetValueLabel.setText("৳50,000")
-        if self.totalSavedValueLabel:
-            self.totalSavedValueLabel.setText("৳12,500")
+        if self.parent_window is None:
+            return
+        summary = self.finance_service.get_goal_summary(self.parent_window.user_id)
+        self.activeGoalsValueLabel.setText(str(summary["active_goals"]))
+        self.totalTargetValueLabel.setText(f"৳{summary['total_target']:,.2f}")
+        self.totalSavedValueLabel.setText(f"৳{summary['total_saved']:,.2f}")
+
+        self._clear_goals_layout()
+        active_goals = self.finance_service.get_goals(self.parent_window.user_id)
+        completed_goals = self.finance_service.get_completed_goals(self.parent_window.user_id)
+
+        if not active_goals and not completed_goals:
+            self.empty_state.setVisible(True)
+            self.goalsScrollArea.setVisible(False)
+            return
+
+        self.empty_state.setVisible(False)
+        self.goalsScrollArea.setVisible(True)
+
+        for goal in active_goals:
+            self.goalsLayout.addWidget(self._goal_card(goal))
+
+        if completed_goals:
+            completed_label = QLabel("Completed Goals")
+            completed_label.setStyleSheet("font-size: 18px; font-weight: bold; margin-top: 10px;")
+            self.goalsLayout.addWidget(completed_label)
+            for goal in completed_goals:
+                self.goalsLayout.addWidget(self._completed_goal_card(goal))
+
+        self.goalsLayout.addStretch(1)
 
 
 class VaultPayMainWindow(QMainWindow):

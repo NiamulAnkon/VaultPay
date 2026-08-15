@@ -280,3 +280,178 @@ class FinanceService:
         with self.connection_factory() as conn:
             rows = conn.execute(query, params).fetchall()
             return [dict(row) for row in rows]
+
+    def create_goal(self, user_id, name, target_amount, goal_type):
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("Goal name is required.")
+        target_amount = float(target_amount)
+        if target_amount <= 0:
+            raise ValueError("Target amount must be greater than zero.")
+        if goal_type not in {"separate", "direct"}:
+            raise ValueError("Invalid goal type.")
+
+        with self.connection_factory() as conn:
+            goal_id = conn.execute(
+                "INSERT INTO goals (user_id, name, target_amount, goal_type, saved_amount, status) VALUES (?, ?, ?, ?, 0.0, 'active')",
+                (user_id, name, target_amount, goal_type),
+            ).lastrowid
+            conn.commit()
+            return goal_id
+
+    def get_goals(self, user_id, include_completed=False):
+        with self.connection_factory() as conn:
+            wallet = conn.execute("SELECT balance FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
+            wallet_balance = float(wallet["balance"]) if wallet else 0.0
+            rows = conn.execute(
+                "SELECT * FROM goals WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+            goals = []
+            for row in rows:
+                goal = dict(row)
+                if goal["goal_type"] == "direct":
+                    goal["saved_amount"] = wallet_balance
+                goals.append(goal)
+
+            if include_completed:
+                completed_rows = conn.execute(
+                    "SELECT * FROM goals WHERE user_id = ? AND status = 'completed' ORDER BY completed_at DESC",
+                    (user_id,),
+                ).fetchall()
+                for row in completed_rows:
+                    goal = dict(row)
+                    if goal["goal_type"] == "direct":
+                        goal["saved_amount"] = wallet_balance
+                    goals.append(goal)
+            return goals
+
+    def get_completed_goals(self, user_id):
+        with self.connection_factory() as conn:
+            wallet = conn.execute("SELECT balance FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
+            wallet_balance = float(wallet["balance"]) if wallet else 0.0
+            rows = conn.execute(
+                "SELECT * FROM goals WHERE user_id = ? AND status = 'completed' ORDER BY completed_at DESC",
+                (user_id,),
+            ).fetchall()
+            goals = []
+            for row in rows:
+                goal = dict(row)
+                if goal["goal_type"] == "direct":
+                    goal["saved_amount"] = wallet_balance
+                goals.append(goal)
+            return goals
+
+    def get_goal_summary(self, user_id):
+        with self.connection_factory() as conn:
+            wallet = conn.execute("SELECT balance FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
+            wallet_balance = float(wallet["balance"]) if wallet else 0.0
+            active_goals = conn.execute(
+                "SELECT * FROM goals WHERE user_id = ? AND status = 'active' ORDER BY created_at DESC",
+                (user_id,),
+            ).fetchall()
+            total_target = sum(float(goal["target_amount"]) for goal in active_goals)
+            separate_saved = sum(float(goal["saved_amount"]) for goal in active_goals if goal["goal_type"] == "separate")
+            direct_goals_count = sum(1 for goal in active_goals if goal["goal_type"] == "direct")
+            total_saved = separate_saved + (wallet_balance if direct_goals_count > 0 else 0.0)
+            return {
+                "active_goals": len(active_goals),
+                "total_target": total_target,
+                "total_saved": total_saved,
+            }
+
+    def add_goal_savings(self, user_id, goal_id, amount):
+        amount = float(amount)
+        if amount <= 0:
+            raise ValueError("Savings amount must be greater than zero.")
+
+        with self.connection_factory() as conn:
+            goal = conn.execute("SELECT * FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id)).fetchone()
+            if not goal:
+                raise ValueError("Goal not found.")
+            if goal["goal_type"] != "separate":
+                raise ValueError("This goal does not use separate savings.")
+
+            wallet = conn.execute("SELECT balance FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
+            if not wallet:
+                raise ValueError("Wallet not found.")
+            if float(wallet["balance"]) < amount:
+                raise ValueError("Insufficient VaultPay balance to add to this goal.")
+
+            new_saved = float(goal["saved_amount"]) + amount
+            conn.execute("UPDATE goals SET saved_amount = ? WHERE id = ?", (new_saved, goal_id))
+            conn.execute(
+                "UPDATE wallets SET balance = ?, updated_at = datetime('now') WHERE user_id = ?",
+                (float(wallet["balance"]) - amount, user_id),
+            )
+            conn.execute(
+                "INSERT INTO transactions (user_id, type, person, amount, note) VALUES (?, 'Goal Savings', ?, ?, ?)",
+                (user_id, goal["name"], amount, f"Added savings to goal: {goal['name']}"),
+            )
+            conn.commit()
+            return new_saved
+
+    def withdraw_goal_savings(self, user_id, goal_id, amount):
+        amount = float(amount)
+        if amount <= 0:
+            raise ValueError("Withdrawal amount must be greater than zero.")
+
+        with self.connection_factory() as conn:
+            goal = conn.execute("SELECT * FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id)).fetchone()
+            if not goal:
+                raise ValueError("Goal not found.")
+            if goal["goal_type"] != "separate":
+                raise ValueError("This goal does not have separate savings.")
+            if float(goal["saved_amount"]) < amount:
+                raise ValueError("Withdrawal amount exceeds the saved amount for this goal.")
+
+            wallet = conn.execute("SELECT balance FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
+            new_balance = float(wallet["balance"]) + amount if wallet else amount
+            conn.execute("UPDATE goals SET saved_amount = ? WHERE id = ?", (float(goal["saved_amount"]) - amount, goal_id))
+            conn.execute(
+                "UPDATE wallets SET balance = ?, updated_at = datetime('now') WHERE user_id = ?",
+                (new_balance, user_id),
+            )
+            conn.execute(
+                "INSERT INTO transactions (user_id, type, person, amount, note) VALUES (?, 'Goal Withdrawal', ?, ?, ?)",
+                (user_id, goal["name"], amount, f"Withdrew savings from goal: {goal['name']}"),
+            )
+            conn.commit()
+            return float(goal["saved_amount"]) - amount
+
+    def complete_goal(self, user_id, goal_id):
+        with self.connection_factory() as conn:
+            goal = conn.execute("SELECT * FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id)).fetchone()
+            if not goal:
+                raise ValueError("Goal not found.")
+            if goal["status"] == "completed":
+                return dict(goal)
+            conn.execute(
+                "UPDATE goals SET status = 'completed', completed_at = datetime('now') WHERE id = ? AND user_id = ?",
+                (goal_id, user_id),
+            )
+            conn.commit()
+            updated = conn.execute("SELECT * FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id)).fetchone()
+            return dict(updated)
+
+    def remove_goal(self, user_id, goal_id):
+        with self.connection_factory() as conn:
+            goal = conn.execute("SELECT * FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id)).fetchone()
+            if not goal:
+                raise ValueError("Goal not found.")
+
+            if goal["goal_type"] == "separate" and float(goal["saved_amount"]) > 0:
+                wallet = conn.execute("SELECT balance FROM wallets WHERE user_id = ?", (user_id,)).fetchone()
+                balance = float(wallet["balance"]) if wallet else 0.0
+                conn.execute(
+                    "UPDATE wallets SET balance = ?, updated_at = datetime('now') WHERE user_id = ?",
+                    (balance + float(goal["saved_amount"]), user_id),
+                )
+                conn.execute(
+                    "INSERT INTO transactions (user_id, type, person, amount, note) VALUES (?, 'Goal Removed', ?, ?, ?)",
+                    (user_id, goal["name"], float(goal["saved_amount"]), f"Returned saved goal funds to wallet: {goal['name']}"),
+                )
+
+            conn.execute("DELETE FROM goals WHERE id = ? AND user_id = ?", (goal_id, user_id))
+            conn.commit()
+            return True

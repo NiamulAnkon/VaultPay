@@ -69,6 +69,19 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS goals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    target_amount REAL NOT NULL,
+    goal_type TEXT NOT NULL CHECK(goal_type IN ('separate', 'direct')),
+    saved_amount REAL NOT NULL DEFAULT 0.0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed')),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at TEXT,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 """
 
 
