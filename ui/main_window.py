@@ -22,6 +22,10 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QScrollArea,
+    QDialog,
+    QDoubleSpinBox,
+    QProgressBar,
 )
 from pathlib import Path
 
@@ -631,6 +635,395 @@ class SettingsPage(QWidget):
         self.currency_combo.setCurrentText(currency)
 
 
+class CreateGoalDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Create New Goal")
+        self.setModal(True)
+        self.setObjectName("createGoalDialog")
+        self.resize(520, 360)
+        layout = QVBoxLayout(self)
+        title = QLabel("Create New Goal")
+        title.setStyleSheet("font-size: 20px; font-weight: bold; color: #F8FAFC;")
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        self.goalNameInput = QLineEdit()
+        self.goalNameInput.setPlaceholderText("e.g. New Phone")
+        self.goalNameInput.setObjectName("goalNameInput")
+        self.targetAmountInput = QDoubleSpinBox()
+        self.targetAmountInput.setMaximum(1000000000.0)
+        self.targetAmountInput.setPrefix("৳")
+        self.targetAmountInput.setObjectName("targetAmountInput")
+        form.addRow("Goal Name", self.goalNameInput)
+        form.addRow("Target Amount", self.targetAmountInput)
+        layout.addLayout(form)
+
+        # Goal type selectable cards
+        type_layout = QHBoxLayout()
+        self.separateSavingsOption = QPushButton("Save Separately\nMove money from your VaultPay balance and reserve it for this goal.")
+        self.separateSavingsOption.setCheckable(True)
+        self.separateSavingsOption.setObjectName("separateSavingsOption")
+        self.separateSavingsOption.setStyleSheet("QPushButton { text-align: left; padding: 12px; background: #111827; border: 1px solid #334155; } QPushButton:checked { border: 2px solid #1E88E5; }")
+        self.directBalanceOption = QPushButton("Direct Balance\nTrack progress based on your VaultPay balance without reserving money.")
+        self.directBalanceOption.setCheckable(True)
+        self.directBalanceOption.setObjectName("directBalanceOption")
+        self.directBalanceOption.setStyleSheet("QPushButton { text-align: left; padding: 12px; background: #111827; border: 1px solid #334155; } QPushButton:checked { border: 2px solid #00C2FF; }")
+        self.separateSavingsOption.clicked.connect(lambda: self._select_type("separate"))
+        self.directBalanceOption.clicked.connect(lambda: self._select_type("direct"))
+        type_layout.addWidget(self.separateSavingsOption)
+        type_layout.addWidget(self.directBalanceOption)
+        layout.addLayout(type_layout)
+
+        # Action buttons
+        btn_row = QHBoxLayout()
+        self.cancelCreateGoalButton = QPushButton("Cancel")
+        self.cancelCreateGoalButton.setObjectName("cancelCreateGoalButton")
+        self.confirmCreateGoalButton = QPushButton("Create Goal")
+        self.confirmCreateGoalButton.setObjectName("confirmCreateGoalButton")
+        btn_row.addStretch(1)
+        btn_row.addWidget(self.cancelCreateGoalButton)
+        btn_row.addWidget(self.confirmCreateGoalButton)
+        layout.addLayout(btn_row)
+
+        self.cancelCreateGoalButton.clicked.connect(self.reject)
+        self.confirmCreateGoalButton.clicked.connect(self._on_confirm)
+        self._selected_type = None
+
+    def _select_type(self, t):
+        self._selected_type = t
+        self.separateSavingsOption.setChecked(t == "separate")
+        self.directBalanceOption.setChecked(t == "direct")
+
+    def _on_confirm(self):
+        # Basic validation placeholder
+        if not self.goalNameInput.text() or self.targetAmountInput.value() <= 0 or not self._selected_type:
+            QMessageBox.warning(self, "Validation", "Please fill all fields and select a goal type.")
+            return
+        self.accept()
+
+
+class AddSavingsDialog(QDialog):
+    def __init__(self, goal_name, current_saved, remaining, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Savings")
+        self.setModal(True)
+        self.setObjectName("addSavingsDialog")
+        self.resize(420, 220)
+        layout = QVBoxLayout(self)
+        header = QLabel(f"Add Savings to: {goal_name}")
+        header.setStyleSheet("font-weight: bold; font-size: 16px;")
+        layout.addWidget(header)
+        info = QLabel(f"Current Saved: ৳{current_saved:,.2f} • Remaining: ৳{remaining:,.2f}")
+        layout.addWidget(info)
+        self.addSavingsAmountInput = QDoubleSpinBox()
+        self.addSavingsAmountInput.setPrefix("৳")
+        self.addSavingsAmountInput.setMaximum(1000000000.0)
+        self.addSavingsAmountInput.setObjectName("addSavingsAmountInput")
+        layout.addWidget(self.addSavingsAmountInput)
+        btn_row = QHBoxLayout()
+        self.cancelAddSavingsButton = QPushButton("Cancel")
+        self.cancelAddSavingsButton.setObjectName("cancelAddSavingsButton")
+        self.confirmAddSavingsButton = QPushButton("Add Savings")
+        self.confirmAddSavingsButton.setObjectName("confirmAddSavingsButton")
+        btn_row.addStretch(1)
+        btn_row.addWidget(self.cancelAddSavingsButton)
+        btn_row.addWidget(self.confirmAddSavingsButton)
+        layout.addLayout(btn_row)
+        self.cancelAddSavingsButton.clicked.connect(self.reject)
+        self.confirmAddSavingsButton.clicked.connect(self.accept)
+
+
+class WithdrawSavingsDialog(QDialog):
+    def __init__(self, goal_name, current_saved, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Withdraw Savings")
+        self.setModal(True)
+        self.setObjectName("withdrawSavingsDialog")
+        self.resize(420, 220)
+        layout = QVBoxLayout(self)
+        header = QLabel(f"Withdraw from: {goal_name}")
+        header.setStyleSheet("font-weight: bold; font-size: 16px;")
+        layout.addWidget(header)
+        info = QLabel(f"Current Saved: ৳{current_saved:,.2f}\nWithdrawn money will return to your main VaultPay balance.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        self.withdrawSavingsAmountInput = QDoubleSpinBox()
+        self.withdrawSavingsAmountInput.setPrefix("৳")
+        self.withdrawSavingsAmountInput.setMaximum(current_saved)
+        self.withdrawSavingsAmountInput.setObjectName("withdrawSavingsAmountInput")
+        layout.addWidget(self.withdrawSavingsAmountInput)
+        btn_row = QHBoxLayout()
+        self.cancelWithdrawSavingsButton = QPushButton("Cancel")
+        self.cancelWithdrawSavingsButton.setObjectName("cancelWithdrawSavingsButton")
+        self.confirmWithdrawSavingsButton = QPushButton("Withdraw")
+        self.confirmWithdrawSavingsButton.setObjectName("confirmWithdrawSavingsButton")
+        btn_row.addStretch(1)
+        btn_row.addWidget(self.cancelWithdrawSavingsButton)
+        btn_row.addWidget(self.confirmWithdrawSavingsButton)
+        layout.addLayout(btn_row)
+        self.cancelWithdrawSavingsButton.clicked.connect(self.reject)
+        self.confirmWithdrawSavingsButton.clicked.connect(self.accept)
+
+
+class CompleteGoalDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Complete Goal")
+        self.setModal(True)
+        self.setObjectName("completeGoalDialog")
+        self.resize(360, 160)
+        layout = QVBoxLayout(self)
+        label = QLabel("Have you purchased or completed this goal?")
+        layout.addWidget(label)
+        btn_row = QHBoxLayout()
+        self.cancelCompleteGoalButton = QPushButton("Cancel")
+        self.cancelCompleteGoalButton.setObjectName("cancelCompleteGoalButton")
+        self.confirmCompleteGoalButton = QPushButton("Mark as Completed")
+        self.confirmCompleteGoalButton.setObjectName("confirmCompleteGoalButton")
+        btn_row.addStretch(1)
+        btn_row.addWidget(self.cancelCompleteGoalButton)
+        btn_row.addWidget(self.confirmCompleteGoalButton)
+        layout.addLayout(btn_row)
+        self.cancelCompleteGoalButton.clicked.connect(self.reject)
+        self.confirmCompleteGoalButton.clicked.connect(self.accept)
+
+
+class RemoveGoalDialog(QDialog):
+    def __init__(self, is_separate=False, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Remove Goal")
+        self.setModal(True)
+        self.setObjectName("removeGoalDialog")
+        self.resize(420, 200)
+        layout = QVBoxLayout(self)
+        label = QLabel("Are you sure you want to remove this goal?")
+        layout.addWidget(label)
+        if is_separate:
+            note = QLabel("Any separately saved money will be returned to your main VaultPay balance.")
+            note.setWordWrap(True)
+            layout.addWidget(note)
+        btn_row = QHBoxLayout()
+        self.cancelRemoveGoalButton = QPushButton("Cancel")
+        self.cancelRemoveGoalButton.setObjectName("cancelRemoveGoalButton")
+        self.confirmRemoveGoalButton = QPushButton("Remove Goal")
+        self.confirmRemoveGoalButton.setObjectName("confirmRemoveGoalButton")
+        self.confirmRemoveGoalButton.setStyleSheet("QPushButton { background: #EF4444; color: white; }")
+        btn_row.addStretch(1)
+        btn_row.addWidget(self.cancelRemoveGoalButton)
+        btn_row.addWidget(self.confirmRemoveGoalButton)
+        layout.addLayout(btn_row)
+        self.cancelRemoveGoalButton.clicked.connect(self.reject)
+        self.confirmRemoveGoalButton.clicked.connect(self.accept)
+
+
+class GoalsPage(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.parent_window = parent
+        self.setStyleSheet("QWidget { background: #0A0F1C; } QLabel { color: #F8FAFC; }")
+        root = QVBoxLayout(self)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.setSpacing(12)
+
+        # Header
+        header_row = QHBoxLayout()
+        title = QLabel("Goals")
+        title.setStyleSheet("font-size: 28px; font-weight: bold;")
+        header_row.addWidget(title)
+        subtitle = QLabel("Track your savings and stay focused on what you want to achieve.")
+        subtitle.setStyleSheet("color: #B0BEC5; margin-left: 12px;")
+        header_row.addWidget(subtitle)
+        header_row.addStretch(1)
+        self.createGoalButton = QPushButton("+ Create Goal")
+        self.createGoalButton.setObjectName("createGoalButton")
+        self.createGoalButton.setStyleSheet("QPushButton { background: #1E88E5; color: white; padding: 8px 12px; border-radius: 8px; }")
+        self.createGoalButton.clicked.connect(self.open_create_dialog)
+        header_row.addWidget(self.createGoalButton)
+        root.addLayout(header_row)
+
+        # Summary cards
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(12)
+        self.activeGoalsCard = self._summary_card("Active Goals", "0", "activeGoalsCard", "activeGoalsValueLabel")
+        self.totalTargetCard = self._summary_card("Total Target", "৳0", "totalTargetCard", "totalTargetValueLabel")
+        self.totalSavedCard = self._summary_card("Total Saved", "৳0", "totalSavedCard", "totalSavedValueLabel")
+        for c in [self.activeGoalsCard, self.totalTargetCard, self.totalSavedCard]:
+            cards_row.addWidget(c)
+        root.addLayout(cards_row)
+
+        # Goals area
+        self.goalsScrollArea = QScrollArea()
+        self.goalsScrollArea.setObjectName("goalsScrollArea")
+        self.goalsScrollArea.setWidgetResizable(True)
+        container = QWidget()
+        container.setStyleSheet("background: transparent;")
+        container_layout = QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(12)
+        container.setLayout(container_layout)
+        container.setObjectName("goalsContainer")
+        self.goalsLayout = container_layout
+        self.goalsLayout.setObjectName("goalsLayout")
+
+        # Add a couple of example cards
+        self._add_sample_goals()
+
+        self.goalsScrollArea.setWidget(container)
+        root.addWidget(self.goalsScrollArea)
+
+        # Empty state (hidden by default)
+        self.empty_state = QFrame()
+        self.empty_state.setVisible(False)
+        empty_layout = QVBoxLayout(self.empty_state)
+        empty_label = QLabel("No goals yet")
+        empty_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+        empty_sub = QLabel("Create your first goal and start tracking your progress.")
+        empty_sub.setStyleSheet("color: #B0BEC5;")
+        empty_btn = QPushButton("Create Your First Goal")
+        empty_btn.setObjectName("emptyStateCreateGoalButton")
+        empty_btn.setStyleSheet("QPushButton { background: #1E88E5; color: white; padding: 8px 12px; border-radius: 8px; }")
+        empty_btn.clicked.connect(self.open_create_dialog)
+        empty_layout.addWidget(empty_label)
+        empty_layout.addWidget(empty_sub)
+        empty_layout.addWidget(empty_btn)
+        root.addWidget(self.empty_state)
+
+    def _summary_card(self, title, value, object_name, value_object_name):
+        frame = QFrame()
+        frame.setObjectName(object_name)
+        frame.setStyleSheet("QFrame { background: #111827; border: 1px solid #1F2937; border-radius: 12px; }")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 10, 12, 10)
+        title_label = QLabel(title)
+        title_label.setStyleSheet("color: #94A3B8; font-size: 12px;")
+        val = QLabel(value)
+        val.setObjectName(value_object_name)
+        val.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
+        layout.addWidget(title_label)
+        layout.addWidget(val)
+        return frame
+
+    def _add_sample_goals(self):
+        # Sample 1: Save Separately
+        card1 = self._goal_card(
+            name="New Gaming Mouse",
+            goal_type="separate",
+            saved=2000,
+            target=5000,
+        )
+        # Sample 2: Direct Balance
+        card2 = self._goal_card(
+            name="Trip to Cox's Bazar",
+            goal_type="direct",
+            saved=5000,
+            target=15000,
+        )
+        self.goalsLayout.addWidget(card1)
+        self.goalsLayout.addWidget(card2)
+        self.goalsLayout.addStretch(1)
+
+    def _goal_card(self, name, goal_type, saved, target):
+        frame = QFrame()
+        frame.setStyleSheet("QFrame { background: #1A2332; border: 1px solid #334155; border-radius: 12px; }")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(12, 12, 12, 12)
+        top_row = QHBoxLayout()
+        name_label = QLabel(name)
+        name_label.setStyleSheet("font-weight: bold; font-size: 16px;")
+        top_row.addWidget(name_label)
+        badge = QLabel("Save Separately" if goal_type == "separate" else "Direct Balance")
+        badge.setStyleSheet(
+            "QLabel { padding: 6px 8px; border-radius: 8px; font-size: 12px; }"
+        )
+        if goal_type == "separate":
+            badge.setStyleSheet(badge.styleSheet() + "QLabel { background: #1E88E5; color: white; }")
+        else:
+            badge.setStyleSheet(badge.styleSheet() + "QLabel { background: #00C2FF; color: #021024; }")
+        top_row.addStretch(1)
+        top_row.addWidget(badge)
+        layout.addLayout(top_row)
+
+        # Progress section
+        progress_row = QHBoxLayout()
+        left = QVBoxLayout()
+        left.addWidget(QLabel(f"Saved\n৳{saved:,.2f}"))
+        left.addWidget(QLabel(f"Target\n৳{target:,.2f}"))
+        progress_row.addLayout(left)
+        percent = int((saved / target) * 100) if target > 0 else 0
+        prog = QProgressBar()
+        prog.setObjectName("goalProgressBar")
+        prog.setValue(percent)
+        prog.setStyleSheet("QProgressBar { background: #0F172A; border: 1px solid #334155; height: 12px; border-radius: 6px; } QProgressBar::chunk { background: #00C2FF; }")
+        progress_row.addWidget(prog, 1)
+        right = QVBoxLayout()
+        right.addWidget(QLabel(f"{percent}% Complete"))
+        remaining = target - saved
+        right.addWidget(QLabel(f"৳{remaining:,.2f} remaining"))
+        progress_row.addLayout(right)
+        layout.addLayout(progress_row)
+
+        # Actions
+        action_row = QHBoxLayout()
+        if goal_type == "separate":
+            add_btn = QPushButton("Add Savings")
+            add_btn.setObjectName("addSavingsButton")
+            add_btn.clicked.connect(lambda _, n=name, s=saved, r=remaining: self._open_add_savings(n, s, r))
+            withdraw_btn = QPushButton("Withdraw Savings")
+            withdraw_btn.setObjectName("withdrawSavingsButton")
+            withdraw_btn.clicked.connect(lambda _, n=name, s=saved: self._open_withdraw_savings(n, s))
+            action_row.addWidget(add_btn)
+            action_row.addWidget(withdraw_btn)
+        # Common buttons
+        complete_btn = QPushButton("Complete")
+        complete_btn.setObjectName("completeGoalButton")
+        complete_btn.clicked.connect(lambda _, n=name: self._open_complete(n))
+        remove_btn = QPushButton("Remove")
+        remove_btn.setObjectName("removeGoalButton")
+        remove_btn.clicked.connect(lambda _, n=name, sep=(goal_type=="separate"): self._open_remove(n, sep))
+        action_row.addStretch(1)
+        action_row.addWidget(complete_btn)
+        action_row.addWidget(remove_btn)
+        layout.addLayout(action_row)
+
+        return frame
+
+    def _open_add_savings(self, name, saved, remaining):
+        dlg = AddSavingsDialog(name, saved, remaining, self)
+        dlg.exec_()
+
+    def _open_withdraw_savings(self, name, saved):
+        dlg = WithdrawSavingsDialog(name, saved, self)
+        dlg.exec_()
+
+    def _open_complete(self, name):
+        dlg = CompleteGoalDialog(self)
+        if dlg.exec_() == QDialog.Accepted:
+            QMessageBox.information(self, "Completed", f"Marked '{name}' as completed.")
+
+    def _open_remove(self, name, is_separate):
+        dlg = RemoveGoalDialog(is_separate, self)
+        if dlg.exec_() == QDialog.Accepted:
+            QMessageBox.information(self, "Removed", f"Removed goal '{name}'.")
+
+    def open_create_dialog(self):
+        dlg = CreateGoalDialog(self)
+        if dlg.exec_() == QDialog.Accepted:
+            QMessageBox.information(self, "Goal Created", "Goal created (placeholder).")
+
+    def refresh(self):
+        # Placeholder values until real data is wired
+        self.activeGoalsValueLabel = self.findChild(QLabel, "activeGoalsValueLabel")
+        self.totalTargetValueLabel = self.findChild(QLabel, "totalTargetValueLabel")
+        self.totalSavedValueLabel = self.findChild(QLabel, "totalSavedValueLabel")
+        if self.activeGoalsValueLabel:
+            self.activeGoalsValueLabel.setText("3")
+        if self.totalTargetValueLabel:
+            self.totalTargetValueLabel.setText("৳50,000")
+        if self.totalSavedValueLabel:
+            self.totalSavedValueLabel.setText("৳12,500")
+
+
 class VaultPayMainWindow(QMainWindow):
     def __init__(self, user_id, account_service=None, finance_service=None):
         super().__init__()
@@ -669,6 +1062,7 @@ class VaultPayMainWindow(QMainWindow):
             ("Wallet", "💰", "wallet"),
             ("Transfer", "↗", "transfer"),
             ("Debts", "📌", "debts"),
+            ("Goals", "🎯", "goals"),
             ("Transactions", "🧾", "transactions"),
             ("Profile", "👤", "profile"),
             ("Settings", "⚙", "settings"),
@@ -695,6 +1089,7 @@ class VaultPayMainWindow(QMainWindow):
         self.wallet_page = WalletPage(self)
         self.transfer_page = TransferPage(self)
         self.debts_page = DebtsPage(self)
+        self.goals_page = GoalsPage(self)
         self.transactions_page = TransactionsPage(self)
         self.profile_page = ProfilePage(self)
         self.settings_page = SettingsPage(self)
@@ -703,6 +1098,7 @@ class VaultPayMainWindow(QMainWindow):
         self.pages_widget.addWidget(self.wallet_page)
         self.pages_widget.addWidget(self.transfer_page)
         self.pages_widget.addWidget(self.debts_page)
+        self.pages_widget.addWidget(self.goals_page)
         self.pages_widget.addWidget(self.transactions_page)
         self.pages_widget.addWidget(self.profile_page)
         self.pages_widget.addWidget(self.settings_page)
@@ -720,6 +1116,7 @@ class VaultPayMainWindow(QMainWindow):
             self.user_label.setText(f"{user['full_name']}\n@{user['username']}")
         self.dashboard_page.refresh()
         self.debts_page.refresh()
+        self.goals_page.refresh()
         self.transactions_page.refresh()
         self.profile_page.refresh()
         self.settings_page.refresh()
@@ -730,9 +1127,10 @@ class VaultPayMainWindow(QMainWindow):
             "wallet": 1,
             "transfer": 2,
             "debts": 3,
-            "transactions": 4,
-            "profile": 5,
-            "settings": 6,
+            "goals": 4,
+            "transactions": 5,
+            "profile": 6,
+            "settings": 7,
         }
         self.pages_widget.setCurrentIndex(mapping[page_name])
         self.current_page = page_name
